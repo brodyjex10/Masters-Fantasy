@@ -1,6 +1,5 @@
 export async function handler() {
   const EVENT_ID = "401811941";
-
   const url = `https://site.web.api.espn.com/apis/site/v2/sports/golf/leaderboard?league=pga&event=${EVENT_ID}`;
 
   try {
@@ -9,6 +8,13 @@ export async function handler() {
         "User-Agent": "Mozilla/5.0"
       }
     });
+
+    if (!response.ok) {
+      return {
+        statusCode: 500,
+        body: JSON.stringify({ error: "Failed to fetch ESPN data" })
+      };
+    }
 
     const data = await response.json();
 
@@ -23,18 +29,30 @@ export async function handler() {
         r1: lines[0]?.value ?? "",
         r2: lines[1]?.value ?? "",
         r3: lines[2]?.value ?? "",
-        r4: lines[3]?.value ?? ""
+        r4: lines[3]?.value ?? "",
+        thru:
+          player?.status?.thru ??
+          player?.status?.displayValue ??
+          player?.status?.type?.shortDetail ??
+          ""
       };
     });
 
     return {
       statusCode: 200,
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": "public, max-age=300"
+      },
       body: JSON.stringify({ players })
     };
   } catch (error) {
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: error.message })
+      body: JSON.stringify({
+        error: "Unexpected ESPN fetch error",
+        details: error.message
+      })
     };
   }
 }
