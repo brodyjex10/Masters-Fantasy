@@ -9,6 +9,8 @@ import {
   Flag
 } from "lucide-react";
 
+const STORAGE_KEY = "masters-pool-tracker-state";
+
 const initialTeams = [
   {
     name: "Bwhit",
@@ -134,20 +136,42 @@ const initialTeams = [
   ...team,
   players: team.players.map((name) => ({
     name,
-    scores: ["", "", "", ""]
+    scores: ["", "", "", ""],
+    thru: ""
   }))
 }));
 
 const payoutStructure = [
-  { place: "1st", amount: "$175" },
-  { place: "2nd", amount: "$75" },
-  { place: "3rd", amount: "$25" }
+  { place: "1st", amount: "$400" },
+  { place: "2nd", amount: "$100" },
+  { place: "3rd", amount: "$50" }
 ];
 
 function parseScore(value) {
   if (value === "" || value === null || value === undefined) return null;
   const num = Number(value);
   return Number.isFinite(num) ? num : null;
+}
+
+function normalizeName(name) {
+  return String(name || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]/g, "");
+}
+
+const NAME_ALIASES = {
+  jjspaun: "johnmichaelspaun",
+  johnmichaelspaun: "johnmichaelspaun",
+  ludvigaberg: "ludvigaberg",
+  nicolaihojgaard: "nicolaihojgaard",
+  robertmacintyre: "robertmacintyre"
+};
+
+function normalizePlayerKey(name) {
+  const base = normalizeName(name);
+  return NAME_ALIASES[base] || base;
 }
 
 function getCumulativeScore(player, roundIndex) {
@@ -177,8 +201,8 @@ function getRoundScore(players, roundIndex) {
   );
 }
 
-function getTotalScore(players) {
-  return getRoundScore(players, 3);
+function getTotalScore(players, currentRoundIndex) {
+  return getRoundScore(players, currentRoundIndex);
 }
 
 function getCompletedRounds(players) {
@@ -204,7 +228,8 @@ function buildPlayerIndex(teams) {
       if (!uniquePlayers.has(player.name)) {
         uniquePlayers.set(player.name, {
           name: player.name,
-          scores: [...player.scores]
+          scores: [...player.scores],
+          thru: player.thru || ""
         });
       }
     });
@@ -222,53 +247,99 @@ function getPlayerTeams(teams, playerName) {
     .join(", ");
 }
 
+function applyEspnScoresToTeams(currentTeams, espnPlayers) {
+  const playerMap = new Map(
+    espnPlayers.map((player) => [normalizePlayerKey(player.name), player])
+  );
+
+  return currentTeams.map((team) => ({
+    ...team,
+    players: team.players.map((player) => {
+      const match = playerMap.get(normalizePlayerKey(player.name));
+      if (!match) return player;
+
+      return {
+        ...player,
+        scores: [
+          match.r1 ?? "",
+          match.r2 ?? "",
+          match.r3 ?? "",
+          match.r4 ?? ""
+        ],
+        thru: match.thru || ""
+      };
+    })
+  }));
+}
+
 export default function App() {
-  const [teams, setTeams] = useState(initialTeams);
-  const [activeTab, setActiveTab] = useState("standings");
-
-  const [autoSyncEspn, setAutoSyncEspn] = useState(true);
-  
-  useEffect(() => {
-  if (!autoSyncEspn) return;
-
-  const fetchScores = async () => {
+  const [teams, setTeams] = useState(() => {
     try {
-      const res = await fetch("/.netlify/functions/espn-masters");
-      const data = await res.json();
-
-      setTeams((prev) =>
-        prev.map((team) => ({
-          ...team,
-          players: team.players.map((player) => {
-            const match = data.players.find(
-              (p) =>
-                p.name.toLowerCase() === player.name.toLowerCase()
-            );
-
-            if (!match) return player;
-
-            return {
-              ...player,
-              scores: [
-                match.r1 || "",
-                match.r2 || "",
-                match.r3 || "",
-                match.r4 || ""
-              ]
-            };
-          })
-        }))
-      );
-    } catch (err) {
-      console.error("ESPN fetch failed", err);
+      const saved = localStorage.getItem(STORAGE_KEY);
+      return saved ? JSON.parse(saved) : initialTeams;
+    } catch {
+      return initialTeams;
     }
-  };
+  });
 
-  fetchScores();
-  const interval = setInterval(fetchScores, 5 * 60 * 1000);
+  const [activeTab, setActiveTab] = useState("standings");
+  const [autoSyncEspn, setAutoSyncEspn] = useState(true);
+  const [lastEspnSync, setLastEspnSync] = useState(null);
+  const [espnError, setEspnError] = useState("");
 
-  return () => clearInterval(interval);
-}, [autoSyncEspn]);
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(teams));
+  }, [teams]);
+
+  const currentRoundIndex = useMemo(() => {
+    let latestRound = 0;
+
+    teams.forEach((team) => {
+      team.players.forEach((player) => {
+        player.scores.forEach((score, roundIndex) => {
+          if (parseScore(score) !== null) {
+            latestRound = Math.max(latestRound, roundIndex);
+          }
+        });
+      });
+    });
+
+    return latestRound;
+  }, [teams]);
+
+  useEffect(() => {
+    if (!autoSyncEspn) return;
+
+    let isMounted = true;
+
+    const syncEspnScores = async () => {
+      try {
+        const response = await fetch("/.netlify/functions/espn-masters");
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data?.error || "Failed to load ESPN scores");
+        }
+
+        if (!isMounted) return;
+
+        setTeams((prev) => applyEspnScoresToTeams(prev, data.players || []));
+        setLastEspnSync(new Date());
+        setEspnError("");
+      } catch (error) {
+        if (!isMounted) return;
+        setEspnError(error.message || "ESPN sync failed");
+      }
+    };
+
+    syncEspnScores();
+    const interval = setInterval(syncEspnScores, 5 * 60 * 1000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [autoSyncEspn]);
 
   const updateScore = (teamIndex, playerIndex, roundIndex, value) => {
     const cleaned = value.replace(/[^0-9-]/g, "");
@@ -311,28 +382,19 @@ export default function App() {
     );
   };
 
-  const currentRoundIndex = useMemo(() => {
-    let latestRound = 0;
-
-    teams.forEach((team) => {
-      team.players.forEach((player) => {
-        player.scores.forEach((score, roundIndex) => {
-          if (parseScore(score) !== null) {
-            latestRound = Math.max(latestRound, roundIndex);
-          }
-        });
-      });
-    });
-
-    return latestRound;
-  }, [teams]);
+  const resetScores = () => {
+    const confirmed = window.confirm("Reset all scores?");
+    if (!confirmed) return;
+    setTeams(initialTeams);
+    localStorage.removeItem(STORAGE_KEY);
+  };
 
   const rankedTeams = useMemo(() => {
     return teams
       .map((team) => ({
         ...team,
         currentScore: getRoundScore(team.players, currentRoundIndex),
-        totalScore: getTotalScore(team.players),
+        totalScore: getTotalScore(team.players, currentRoundIndex),
         completedRounds: getCompletedRounds(team.players)
       }))
       .sort((a, b) => {
@@ -343,6 +405,7 @@ export default function App() {
 
   const playerIndex = useMemo(() => buildPlayerIndex(teams), [teams]);
   const leaderboardLeader = rankedTeams[0];
+
   const enteredScores = teams.reduce(
     (count, team) =>
       count +
@@ -358,7 +421,8 @@ export default function App() {
     return playerIndex
       .map((player) => ({
         ...player,
-        total: getCumulativeScore(player, currentRoundIndex)
+        total: getCumulativeScore(player, currentRoundIndex),
+        thru: player.thru || ""
       }))
       .sort((a, b) => a.total - b.total)
       .slice(0, 18);
@@ -375,14 +439,47 @@ export default function App() {
                   <Flag className="h-7 w-7 text-emerald-300" />
                   <span>Masters Pool</span>
                 </div>
-                <div className="text-sm font-medium text-emerald-100/80">Augusta National</div>
+                <div className="text-sm font-medium text-emerald-100/80">
+                  Augusta National
+                </div>
+
                 <div className="mt-4 flex flex-wrap items-center gap-2 text-sm text-emerald-50/80">
-                  <button className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 font-medium">
+                  <button
+                    onClick={() => window.location.reload()}
+                    className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 font-medium"
+                  >
                     <RefreshCw className="h-4 w-4" /> Refresh
                   </button>
+
+                  <button
+                    onClick={() => setAutoSyncEspn((prev) => !prev)}
+                    className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 font-medium"
+                  >
+                    {autoSyncEspn ? "ESPN Auto Sync: On" : "ESPN Auto Sync: Off"}
+                  </button>
+
+                  <button
+                    onClick={resetScores}
+                    className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 font-medium"
+                  >
+                    Reset Scores
+                  </button>
+
                   <div className="rounded-full border border-white/10 bg-black/15 px-3 py-1.5">
-                    Manual score entry enabled
+                    {lastEspnSync
+                      ? `Last sync: ${lastEspnSync.toLocaleTimeString()}`
+                      : "Waiting for first sync"}
                   </div>
+
+                  {espnError ? (
+                    <div className="rounded-full border border-red-400/20 bg-red-500/10 px-3 py-1.5 text-red-200">
+                      {espnError}
+                    </div>
+                  ) : (
+                    <div className="rounded-full border border-white/10 bg-black/15 px-3 py-1.5">
+                      Manual score entry enabled
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -436,7 +533,8 @@ export default function App() {
                       Live-style standings, built for your pool
                     </h1>
                     <p className="mt-2 max-w-2xl text-sm text-emerald-50/70">
-                      Enter scores manually, track every team, and rank owners by the 4 best cumulative golfer totals through the selected round.
+                      Enter scores manually, track every team, and rank owners by the
+                      4 best cumulative golfer totals through the latest entered round.
                     </p>
                   </div>
 
@@ -456,6 +554,7 @@ export default function App() {
                   <div className="mt-3 text-3xl font-black">{teams.length}</div>
                   <div className="mt-1 text-sm text-emerald-50/60">Owners in the pool</div>
                 </div>
+
                 <div className="rounded-[24px] border border-white/10 bg-[#173a2f] p-4">
                   <div className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-emerald-50/55">
                     <Target className="h-4 w-4" /> Entries
@@ -463,6 +562,7 @@ export default function App() {
                   <div className="mt-3 text-3xl font-black">{enteredScores}</div>
                   <div className="mt-1 text-sm text-emerald-50/60">Scores entered so far</div>
                 </div>
+
                 <div className="rounded-[24px] border border-white/10 bg-[#173a2f] p-4">
                   <div className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-emerald-50/55">
                     <Medal className="h-4 w-4" /> Leader
@@ -509,7 +609,7 @@ export default function App() {
                               {formatScore(team.currentScore)}
                             </td>
                             <td className="px-4 py-3 text-emerald-50/70">
-                              {index === 0 ? "$150" : index === 1 ? "$75" : index === 2 ? "$25" : "—"}
+                              {index === 0 ? "$400" : index === 1 ? "$100" : index === 2 ? "$50" : "—"}
                             </td>
                           </tr>
                         ))}
@@ -534,7 +634,7 @@ export default function App() {
                         </div>
                         <h2 className="mt-1 text-2xl font-black">Field Snapshot</h2>
                       </div>
-                      <div className="text-sm text-emerald-50/65">Manual entry</div>
+                      <div className="text-sm text-emerald-50/65">Manual entry / ESPN sync</div>
                     </div>
 
                     <div className="overflow-hidden rounded-2xl border border-white/10">
@@ -547,6 +647,7 @@ export default function App() {
                             <th className="px-3 py-3 text-center">R2</th>
                             <th className="px-3 py-3 text-center">R3</th>
                             <th className="px-3 py-3 text-center">R4</th>
+                            <th className="px-3 py-3 text-center">Thru</th>
                             <th className="px-4 py-3 text-right">Total</th>
                           </tr>
                         </thead>
@@ -560,6 +661,9 @@ export default function App() {
                                   {score === "" ? 0 : score}
                                 </td>
                               ))}
+                              <td className="px-3 py-3 text-center text-sm text-emerald-50/75">
+                                {player.thru || "—"}
+                              </td>
                               <td className="px-4 py-3 text-right font-black text-emerald-200">
                                 {formatScore(player.total)}
                               </td>
@@ -576,7 +680,10 @@ export default function App() {
                     </div>
                     <div className="grid gap-3 sm:grid-cols-3">
                       {payoutStructure.map((payout) => (
-                        <div key={payout.place} className="rounded-2xl border border-white/10 bg-black/15 p-4 text-center">
+                        <div
+                          key={payout.place}
+                          className="rounded-2xl border border-white/10 bg-black/15 p-4 text-center"
+                        >
                           <div className="text-sm font-semibold text-emerald-50/70">{payout.place}</div>
                           <div className="mt-1 text-2xl font-black">{payout.amount}</div>
                         </div>
@@ -610,10 +717,10 @@ export default function App() {
 
                           <div className="flex flex-wrap gap-2 text-sm">
                             <div className="rounded-full bg-white/10 px-3 py-1.5 font-semibold text-emerald-50/80">
-                              R{currentRoundIndex + 1}: {formatScore(getRoundScore(team.players, currentRoundIndex))}
+                              Through R{currentRoundIndex + 1}: {formatScore(getRoundScore(team.players, currentRoundIndex))}
                             </div>
                             <div className="rounded-full bg-emerald-400/15 px-3 py-1.5 font-semibold text-emerald-200">
-                              Tournament Total: {formatScore(getTotalScore(team.players))}
+                              Tournament Total: {formatScore(getTotalScore(team.players, currentRoundIndex))}
                             </div>
                           </div>
                         </div>
@@ -628,6 +735,7 @@ export default function App() {
                               <th className="px-3 py-4 text-center">R2</th>
                               <th className="px-3 py-4 text-center">R3</th>
                               <th className="px-3 py-4 text-center">R4</th>
+                              <th className="px-3 py-4 text-center">Thru</th>
                               <th className="px-3 py-4 text-center">Total</th>
                               <th className="px-5 py-4 text-right md:px-6">Status</th>
                             </tr>
@@ -638,15 +746,21 @@ export default function App() {
                               const playerTotal = getCumulativeScore(player, currentRoundIndex);
 
                               return (
-                                <tr key={player.name} className={`border-t border-white/10 ${isCounting ? "bg-emerald-300/8" : ""}`}>
+                                <tr
+                                  key={player.name}
+                                  className={`border-t border-white/10 ${isCounting ? "bg-emerald-300/8" : ""}`}
+                                >
                                   <td className="px-5 py-4 font-semibold md:px-6">{player.name}</td>
+
                                   {[0, 1, 2, 3].map((roundIndex) => (
                                     <td key={roundIndex} className="px-3 py-3 text-center">
                                       <input
                                         type="text"
                                         inputMode="numeric"
                                         value={player.scores[roundIndex]}
-                                        onChange={(e) => updateScore(teamIndex, playerIndex, roundIndex, e.target.value)}
+                                        onChange={(e) =>
+                                          updateScore(teamIndex, playerIndex, roundIndex, e.target.value)
+                                        }
                                         placeholder="0"
                                         className={`w-16 rounded-xl border px-3 py-2 text-center text-sm font-semibold outline-none transition ${
                                           roundIndex === currentRoundIndex
@@ -656,11 +770,23 @@ export default function App() {
                                       />
                                     </td>
                                   ))}
+
+                                  <td className="px-3 py-3 text-center text-sm text-emerald-50/75">
+                                    {player.thru || "—"}
+                                  </td>
+
                                   <td className="px-3 py-3 text-center font-bold text-emerald-200">
                                     {formatScore(playerTotal)}
                                   </td>
+
                                   <td className="px-5 py-4 text-right md:px-6">
-                                    <span className={`inline-flex rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide ${isCounting ? "bg-emerald-400/15 text-emerald-200" : "bg-white/10 text-emerald-50/70"}`}>
+                                    <span
+                                      className={`inline-flex rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide ${
+                                        isCounting
+                                          ? "bg-emerald-400/15 text-emerald-200"
+                                          : "bg-white/10 text-emerald-50/70"
+                                      }`}
+                                    >
                                       {isCounting ? "Counting" : "Bench"}
                                     </span>
                                   </td>
@@ -702,6 +828,7 @@ export default function App() {
                         <th className="px-3 py-4 text-center">R2</th>
                         <th className="px-3 py-4 text-center">R3</th>
                         <th className="px-3 py-4 text-center">R4</th>
+                        <th className="px-3 py-4 text-center">Thru</th>
                         <th className="px-3 py-4 text-center">Total</th>
                         <th className="px-5 py-4 text-right">Teams</th>
                       </tr>
@@ -714,13 +841,16 @@ export default function App() {
                         return (
                           <tr key={player.name} className="border-t border-white/10">
                             <td className="px-5 py-4 font-semibold">{player.name}</td>
+
                             {[0, 1, 2, 3].map((roundIndex) => (
                               <td key={roundIndex} className="px-3 py-3 text-center">
                                 <input
                                   type="text"
                                   inputMode="numeric"
                                   value={player.scores[roundIndex]}
-                                  onChange={(e) => updatePlayerScoreGlobally(player.name, roundIndex, e.target.value)}
+                                  onChange={(e) =>
+                                    updatePlayerScoreGlobally(player.name, roundIndex, e.target.value)
+                                  }
                                   placeholder="0"
                                   className={`w-16 rounded-xl border px-3 py-2 text-center text-sm font-semibold outline-none transition ${
                                     roundIndex === currentRoundIndex
@@ -730,10 +860,18 @@ export default function App() {
                                 />
                               </td>
                             ))}
+
+                            <td className="px-3 py-3 text-center text-sm text-emerald-50/75">
+                              {player.thru || "—"}
+                            </td>
+
                             <td className="px-3 py-3 text-center font-bold text-emerald-200">
                               {formatScore(playerTotal)}
                             </td>
-                            <td className="px-5 py-4 text-right text-sm text-emerald-50/70">{playerTeams}</td>
+
+                            <td className="px-5 py-4 text-right text-sm text-emerald-50/70">
+                              {playerTeams}
+                            </td>
                           </tr>
                         );
                       })}
