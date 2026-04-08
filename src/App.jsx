@@ -142,9 +142,9 @@ const initialTeams = [
 }));
 
 const payoutStructure = [
-  { place: "1st", amount: "$400" },
-  { place: "2nd", amount: "$100" },
-  { place: "3rd", amount: "$50" }
+  { place: "1st", amount: "$175" },
+  { place: "2nd", amount: "$75" },
+  { place: "3rd", amount: "$25" }
 ];
 
 function parseScore(value) {
@@ -609,7 +609,7 @@ export default function App() {
                               {formatScore(team.currentScore)}
                             </td>
                             <td className="px-4 py-3 text-emerald-50/70">
-                              {index === 0 ? "$400" : index === 1 ? "$100" : index === 2 ? "$50" : "—"}
+                              {index === 0 ? "$175" : index === 1 ? "$75" : index === 2 ? "$25" : "—"}
                             </td>
                           </tr>
                         ))}
