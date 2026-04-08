@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Trophy,
   Users,
@@ -225,6 +225,50 @@ function getPlayerTeams(teams, playerName) {
 export default function App() {
   const [teams, setTeams] = useState(initialTeams);
   const [activeTab, setActiveTab] = useState("standings");
+
+  const [autoSyncEspn, setAutoSyncEspn] = useState(true);
+  
+  useEffect(() => {
+  if (!autoSyncEspn) return;
+
+  const fetchScores = async () => {
+    try {
+      const res = await fetch("/.netlify/functions/espn-masters");
+      const data = await res.json();
+
+      setTeams((prev) =>
+        prev.map((team) => ({
+          ...team,
+          players: team.players.map((player) => {
+            const match = data.players.find(
+              (p) =>
+                p.name.toLowerCase() === player.name.toLowerCase()
+            );
+
+            if (!match) return player;
+
+            return {
+              ...player,
+              scores: [
+                match.r1 || "",
+                match.r2 || "",
+                match.r3 || "",
+                match.r4 || ""
+              ]
+            };
+          })
+        }))
+      );
+    } catch (err) {
+      console.error("ESPN fetch failed", err);
+    }
+  };
+
+  fetchScores();
+  const interval = setInterval(fetchScores, 5 * 60 * 1000);
+
+  return () => clearInterval(interval);
+}, [autoSyncEspn]);
 
   const updateScore = (teamIndex, playerIndex, roundIndex, value) => {
     const cleaned = value.replace(/[^0-9-]/g, "");
