@@ -203,10 +203,6 @@ function getRoundScore(players, roundIndex) {
   );
 }
 
-function getTotalScore(players, roundIndex) {
-  return getRoundScore(players, roundIndex);
-}
-
 function getCompletedRounds(players) {
   let completed = 0;
   for (let roundIndex = 0; roundIndex < 4; roundIndex += 1) {
@@ -414,7 +410,7 @@ export default function App() {
       .map((team) => ({
         ...team,
         currentScore: getRoundScore(team.players, currentRoundIndex),
-        totalScore: getTotalScore(team.players, currentRoundIndex),
+        totalScore: getRoundScore(team.players, currentRoundIndex),
         completedRounds: getCompletedRounds(team.players)
       }))
       .sort((a, b) => {
@@ -636,13 +632,6 @@ export default function App() {
                       </tbody>
                     </table>
                   </div>
-
-                  <div className="mt-5 space-y-2 text-sm text-emerald-50/75">
-                    <div>● Each owner drafts 7 golfers</div>
-                    <div>● Each golfer may be drafted multiple times</div>
-                    <div>● Best 4 cumulative scores count</div>
-                    <div>● Blank rounds stay at 0 until entered</div>
-                  </div>
                 </section>
 
                 <section className="space-y-6">
@@ -654,7 +643,6 @@ export default function App() {
                         </div>
                         <h2 className="mt-1 text-2xl font-black">Field Snapshot</h2>
                       </div>
-                      <div className="text-sm text-emerald-50/65">Manual entry / ESPN sync</div>
                     </div>
 
                     <div className="overflow-hidden rounded-2xl border border-white/10">
@@ -740,7 +728,7 @@ export default function App() {
                               Through R{currentRoundIndex + 1}: {formatScore(getRoundScore(team.players, currentRoundIndex))}
                             </div>
                             <div className="rounded-full bg-emerald-400/15 px-3 py-1.5 font-semibold text-emerald-200">
-                              Tournament Total: {formatScore(getTotalScore(team.players, currentRoundIndex))}
+                              Tournament Total: {formatScore(getRoundScore(team.players, currentRoundIndex))}
                             </div>
                           </div>
                         </div>
