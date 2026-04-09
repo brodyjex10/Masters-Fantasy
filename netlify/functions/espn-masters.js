@@ -17,7 +17,6 @@ export async function handler() {
     }
 
     const data = await response.json();
-
     const competitors =
       data?.events?.[0]?.competitions?.[0]?.competitors ?? [];
 
@@ -27,32 +26,31 @@ export async function handler() {
       }
 
       const s = String(value).trim();
-
       if (s === "E") return "0";
       return s;
     };
 
     const players = competitors.map((player) => {
-      const lines = player?.linescores ?? [];
+      // ESPN leaderboard semantics:
+      // score.displayValue = tournament score to par
+      // statistics/today = current round score to par
+      // R1-R4 on ESPN page are raw strokes, so don't use them as your fantasy inputs
+
+      const todayStat =
+        player?.statistics?.find?.(
+          (s) =>
+            s?.name?.toLowerCase?.() === "today" ||
+            s?.displayName?.toLowerCase?.() === "today"
+        ) || null;
+
+      const today = normalizeGolfScore(
+        todayStat?.displayValue ?? todayStat?.value ?? ""
+      );
 
       return {
         name: player?.athlete?.displayName ?? "",
-
-        // Per-round score relative to par, not raw strokes
-        r1: normalizeGolfScore(lines[0]?.displayValue ?? lines[0]?.value),
-        r2: normalizeGolfScore(lines[1]?.displayValue ?? lines[1]?.value),
-        r3: normalizeGolfScore(lines[2]?.displayValue ?? lines[2]?.value),
-        r4: normalizeGolfScore(lines[3]?.displayValue ?? lines[3]?.value),
-
-        // Tournament total relative to par
-        total: normalizeGolfScore(player?.score?.displayValue),
-
-        // Current round relative to par, if ESPN exposes it
-        today:
-          normalizeGolfScore(
-            player?.statistics?.find?.((s) => s?.name === "today")?.displayValue
-          ) || "",
-
+        total: normalizeGolfScore(player?.score?.displayValue ?? ""),
+        today,
         thru:
           player?.status?.thru ??
           player?.status?.displayValue ??
