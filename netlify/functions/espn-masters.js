@@ -17,25 +17,25 @@ export async function handler() {
     }
 
     const data = await response.json();
-    const competitors =
-      data?.events?.[0]?.competitions?.[0]?.competitors ?? [];
+    const competition = data?.events?.[0]?.competitions?.[0];
+    const competitors = competition?.competitors ?? [];
 
     const normalizeGolfScore = (value) => {
       if (value === null || value === undefined || value === "" || value === "--") {
         return "";
       }
-
       const s = String(value).trim();
-      if (s === "E") return "0";
+      if (s.toUpperCase() === "E") return "0";
       return s;
     };
 
-    const players = competitors.map((player) => {
-      // ESPN leaderboard semantics:
-      // score.displayValue = tournament score to par
-      // statistics/today = current round score to par
-      // R1-R4 on ESPN page are raw strokes, so don't use them as your fantasy inputs
+    const statusPeriod = competition?.status?.period;
+    const currentRoundIndex =
+      typeof statusPeriod === "number" && statusPeriod >= 1 && statusPeriod <= 4
+        ? statusPeriod - 1
+        : 0;
 
+    const players = competitors.map((player) => {
       const todayStat =
         player?.statistics?.find?.(
           (s) =>
@@ -49,8 +49,8 @@ export async function handler() {
 
       return {
         name: player?.athlete?.displayName ?? "",
-        total: normalizeGolfScore(player?.score?.displayValue ?? ""),
         today,
+        total: normalizeGolfScore(player?.score?.displayValue ?? ""),
         thru:
           player?.status?.thru ??
           player?.status?.displayValue ??
@@ -65,7 +65,10 @@ export async function handler() {
         "Content-Type": "application/json",
         "Cache-Control": "public, max-age=300"
       },
-      body: JSON.stringify({ players })
+      body: JSON.stringify({
+        currentRoundIndex,
+        players
+      })
     };
   } catch (error) {
     return {
