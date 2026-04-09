@@ -21,26 +21,37 @@ export async function handler() {
     const competitors = competition?.competitors ?? [];
 
     const normalizeGolfScore = (value) => {
-      if (value === null || value === undefined || value === "" || value === "--") {
+      if (
+        value === null ||
+        value === undefined ||
+        value === "" ||
+        value === "--"
+      ) {
         return "";
       }
+
       const s = String(value).trim();
+
       if (s.toUpperCase() === "E") return "0";
       return s;
     };
 
     const statusPeriod = competition?.status?.period;
     const currentRoundIndex =
-      typeof statusPeriod === "number" && statusPeriod >= 1 && statusPeriod <= 4
+      typeof statusPeriod === "number" &&
+      statusPeriod >= 1 &&
+      statusPeriod <= 4
         ? statusPeriod - 1
         : 0;
 
     const players = competitors.map((player) => {
+      const statistics = player?.statistics ?? [];
+
       const todayStat =
-        player?.statistics?.find?.(
-          (s) =>
-            s?.name?.toLowerCase?.() === "today" ||
-            s?.displayName?.toLowerCase?.() === "today"
+        statistics.find(
+          (stat) =>
+            stat?.name?.toLowerCase?.() === "today" ||
+            stat?.displayName?.toLowerCase?.() === "today"
         ) || null;
 
       const today = normalizeGolfScore(
