@@ -142,14 +142,16 @@ const initialTeams = [
 }));
 
 const payoutStructure = [
-  { place: "1st", amount: "$175" },
-  { place: "2nd", amount: "$75" },
-  { place: "3rd", amount: "$25" }
+  { place: "1st", amount: "$400" },
+  { place: "2nd", amount: "$100" },
+  { place: "3rd", amount: "$50" }
 ];
 
 function parseScore(value) {
   if (value === "" || value === null || value === undefined) return null;
-  const num = Number(value);
+  const cleaned = String(value).trim();
+  if (cleaned.toUpperCase() === "E") return 0;
+  const num = Number(cleaned);
   return Number.isFinite(num) ? num : null;
 }
 
@@ -162,8 +164,8 @@ function normalizeName(name) {
 }
 
 const NAME_ALIASES = {
-  jjspaun: "johnmichaelspaun",
-  johnmichaelspaun: "johnmichaelspaun",
+  jjspaun: "jjspaun",
+  johnmichaelspaun: "jjspaun",
   ludvigaberg: "ludvigaberg",
   nicolaihojgaard: "nicolaihojgaard",
   robertmacintyre: "robertmacintyre"
@@ -201,8 +203,8 @@ function getRoundScore(players, roundIndex) {
   );
 }
 
-function getTotalScore(players, currentRoundIndex) {
-  return getRoundScore(players, currentRoundIndex);
+function getTotalScore(players, roundIndex) {
+  return getRoundScore(players, roundIndex);
 }
 
 function getCompletedRounds(players) {
@@ -247,7 +249,7 @@ function getPlayerTeams(teams, playerName) {
     .join(", ");
 }
 
-function applyEspnScoresToTeams(currentTeams, espnPlayers) {
+function applyEspnScoresToTeams(currentTeams, espnPlayers, currentRoundIndex) {
   const playerMap = new Map(
     espnPlayers.map((player) => [normalizePlayerKey(player.name), player])
   );
@@ -258,14 +260,17 @@ function applyEspnScoresToTeams(currentTeams, espnPlayers) {
       const match = playerMap.get(normalizePlayerKey(player.name));
       if (!match) return player;
 
+      const updatedScores = [...player.scores];
+      const todayValue =
+        match.today === "E" ? "0" : match.today ?? updatedScores[currentRoundIndex];
+
+      if (todayValue !== undefined && todayValue !== null && todayValue !== "") {
+        updatedScores[currentRoundIndex] = String(todayValue);
+      }
+
       return {
         ...player,
-        scores: [
-          match.r1 ?? "",
-          match.r2 ?? "",
-          match.r3 ?? "",
-          match.r4 ?? ""
-        ],
+        scores: updatedScores,
         thru: match.thru || ""
       };
     })
@@ -286,12 +291,13 @@ export default function App() {
   const [autoSyncEspn, setAutoSyncEspn] = useState(true);
   const [lastEspnSync, setLastEspnSync] = useState(null);
   const [espnError, setEspnError] = useState("");
+  const [espnRoundIndex, setEspnRoundIndex] = useState(null);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(teams));
   }, [teams]);
 
-  const currentRoundIndex = useMemo(() => {
+  const fallbackRoundIndex = useMemo(() => {
     let latestRound = 0;
 
     teams.forEach((team) => {
@@ -306,6 +312,9 @@ export default function App() {
 
     return latestRound;
   }, [teams]);
+
+  const currentRoundIndex =
+    typeof espnRoundIndex === "number" ? espnRoundIndex : fallbackRoundIndex;
 
   useEffect(() => {
     if (!autoSyncEspn) return;
@@ -323,7 +332,17 @@ export default function App() {
 
         if (!isMounted) return;
 
-        setTeams((prev) => applyEspnScoresToTeams(prev, data.players || []));
+        const incomingRoundIndex =
+          typeof data.currentRoundIndex === "number"
+            ? data.currentRoundIndex
+            : fallbackRoundIndex;
+
+        setEspnRoundIndex(incomingRoundIndex);
+
+        setTeams((prev) =>
+          applyEspnScoresToTeams(prev, data.players || [], incomingRoundIndex)
+        );
+
         setLastEspnSync(new Date());
         setEspnError("");
       } catch (error) {
@@ -339,10 +358,10 @@ export default function App() {
       isMounted = false;
       clearInterval(interval);
     };
-  }, [autoSyncEspn]);
+  }, [autoSyncEspn, fallbackRoundIndex]);
 
   const updateScore = (teamIndex, playerIndex, roundIndex, value) => {
-    const cleaned = value.replace(/[^0-9-]/g, "");
+    const cleaned = value.replace(/[^0-9E+\-]/gi, "");
     const playerName = teams[teamIndex].players[playerIndex].name;
 
     setTeams((prev) =>
@@ -363,7 +382,7 @@ export default function App() {
   };
 
   const updatePlayerScoreGlobally = (playerName, roundIndex, value) => {
-    const cleaned = value.replace(/[^0-9-]/g, "");
+    const cleaned = value.replace(/[^0-9E+\-]/gi, "");
 
     setTeams((prev) =>
       prev.map((team) => ({
@@ -386,6 +405,7 @@ export default function App() {
     const confirmed = window.confirm("Reset all scores?");
     if (!confirmed) return;
     setTeams(initialTeams);
+    setEspnRoundIndex(null);
     localStorage.removeItem(STORAGE_KEY);
   };
 
@@ -534,7 +554,7 @@ export default function App() {
                     </h1>
                     <p className="mt-2 max-w-2xl text-sm text-emerald-50/70">
                       Enter scores manually, track every team, and rank owners by the
-                      4 best cumulative golfer totals through the latest entered round.
+                      4 best cumulative golfer totals through the latest active round.
                     </p>
                   </div>
 
@@ -609,7 +629,7 @@ export default function App() {
                               {formatScore(team.currentScore)}
                             </td>
                             <td className="px-4 py-3 text-emerald-50/70">
-                              {index === 0 ? "$175" : index === 1 ? "$75" : index === 2 ? "$25" : "—"}
+                              {index === 0 ? "$400" : index === 1 ? "$100" : index === 2 ? "$50" : "—"}
                             </td>
                           </tr>
                         ))}
