@@ -410,7 +410,6 @@ export default function App() {
       .map((team) => ({
         ...team,
         currentScore: getRoundScore(team.players, currentRoundIndex),
-        totalScore: getRoundScore(team.players, currentRoundIndex),
         completedRounds: getCompletedRounds(team.players)
       }))
       .sort((a, b) => {
@@ -432,17 +431,6 @@ export default function App() {
       ),
     0
   );
-
-  const manualMastersLeaderboard = useMemo(() => {
-    return playerIndex
-      .map((player) => ({
-        ...player,
-        total: getCumulativeScore(player, currentRoundIndex),
-        thru: player.thru || ""
-      }))
-      .sort((a, b) => a.total - b.total)
-      .slice(18);
-  }, [playerIndex, currentRoundIndex]);
 
   const mastersLeaderboard = useMemo(() => {
     return playerIndex
@@ -861,8 +849,6 @@ export default function App() {
                 </div>
               </section>
             )}
-
-            {manualMastersLeaderboard.length > 0 && <div className="hidden" />}
           </div>
         </div>
       </div>
