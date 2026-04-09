@@ -441,6 +441,17 @@ export default function App() {
         thru: player.thru || ""
       }))
       .sort((a, b) => a.total - b.total)
+      .slice(18);
+  }, [playerIndex, currentRoundIndex]);
+
+  const mastersLeaderboard = useMemo(() => {
+    return playerIndex
+      .map((player) => ({
+        ...player,
+        total: getCumulativeScore(player, currentRoundIndex),
+        thru: player.thru || ""
+      }))
+      .sort((a, b) => a.total - b.total)
       .slice(0, 18);
   }, [playerIndex, currentRoundIndex]);
 
@@ -548,10 +559,6 @@ export default function App() {
                     <h1 className="text-3xl font-black tracking-tight md:text-4xl">
                       Live-style standings, built for your pool
                     </h1>
-                    <p className="mt-2 max-w-2xl text-sm text-emerald-50/70">
-                      Enter scores manually, track every team, and rank owners by the
-                      4 best cumulative golfer totals through the latest active round.
-                    </p>
                   </div>
 
                   <div className="flex flex-wrap gap-2">
@@ -568,7 +575,6 @@ export default function App() {
                     <Users className="h-4 w-4" /> Teams
                   </div>
                   <div className="mt-3 text-3xl font-black">{teams.length}</div>
-                  <div className="mt-1 text-sm text-emerald-50/60">Owners in the pool</div>
                 </div>
 
                 <div className="rounded-[24px] border border-white/10 bg-[#173a2f] p-4">
@@ -576,7 +582,6 @@ export default function App() {
                     <Target className="h-4 w-4" /> Entries
                   </div>
                   <div className="mt-3 text-3xl font-black">{enteredScores}</div>
-                  <div className="mt-1 text-sm text-emerald-50/60">Scores entered so far</div>
                 </div>
 
                 <div className="rounded-[24px] border border-white/10 bg-[#173a2f] p-4">
@@ -595,12 +600,7 @@ export default function App() {
               <div className="grid gap-6 xl:grid-cols-[1fr_0.9fr]">
                 <section className="rounded-[28px] border border-white/10 bg-[#173a2f] p-5">
                   <div className="mb-4 flex items-center justify-between">
-                    <div>
-                      <div className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-50/55">
-                        Leaderboard
-                      </div>
-                      <h2 className="mt-1 text-2xl font-black">Standings</h2>
-                    </div>
+                    <h2 className="text-2xl font-black">Standings</h2>
                     <div className="rounded-full border border-white/10 bg-black/15 px-3 py-1.5 text-xs font-semibold text-emerald-50/75">
                       Automatic through Round {currentRoundIndex + 1}
                     </div>
@@ -618,7 +618,7 @@ export default function App() {
                       </thead>
                       <tbody>
                         {rankedTeams.map((team, index) => (
-                          <tr key={team.name} className="border-t border-white/10 bg-white/0">
+                          <tr key={team.name} className="border-t border-white/10">
                             <td className="px-4 py-3 font-bold">{index + 1}</td>
                             <td className="px-4 py-3 font-semibold">{team.name}</td>
                             <td className="px-4 py-3 font-black text-emerald-200">
@@ -634,69 +634,45 @@ export default function App() {
                   </div>
                 </section>
 
-                <section className="space-y-6">
-                  <div className="rounded-[28px] border border-white/10 bg-[#173a2f] p-5">
-                    <div className="mb-4 flex items-center justify-between">
-                      <div>
-                        <div className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-50/55">
-                          Masters Leaderboard
-                        </div>
-                        <h2 className="mt-1 text-2xl font-black">Field Snapshot</h2>
-                      </div>
-                    </div>
-
-                    <div className="overflow-hidden rounded-2xl border border-white/10">
-                      <table className="min-w-full border-collapse">
-                        <thead>
-                          <tr className="bg-black/15 text-left text-xs uppercase tracking-[0.2em] text-emerald-50/55">
-                            <th className="px-4 py-3">Pos</th>
-                            <th className="px-4 py-3">Player</th>
-                            <th className="px-3 py-3 text-center">R1</th>
-                            <th className="px-3 py-3 text-center">R2</th>
-                            <th className="px-3 py-3 text-center">R3</th>
-                            <th className="px-3 py-3 text-center">R4</th>
-                            <th className="px-3 py-3 text-center">Thru</th>
-                            <th className="px-4 py-3 text-right">Total</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {manualMastersLeaderboard.map((player, index) => (
-                            <tr key={player.name} className="border-t border-white/10">
-                              <td className="px-4 py-3 font-bold">{index + 1}</td>
-                              <td className="px-4 py-3 font-semibold">{player.name}</td>
-                              {player.scores.map((score, idx) => (
-                                <td key={idx} className="px-3 py-3 text-center text-sm text-emerald-50/75">
-                                  {score === "" ? 0 : score}
-                                </td>
-                              ))}
-                              <td className="px-3 py-3 text-center text-sm text-emerald-50/75">
-                                {player.thru || "—"}
-                              </td>
-                              <td className="px-4 py-3 text-right font-black text-emerald-200">
-                                {formatScore(player.total)}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                <section className="rounded-[28px] border border-white/10 bg-[#173a2f] p-5">
+                  <div className="mb-4 flex items-center justify-between">
+                    <h2 className="text-2xl font-black">Field Snapshot</h2>
                   </div>
 
-                  <div className="rounded-[28px] border border-white/10 bg-[#173a2f] p-5">
-                    <div className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.2em] text-emerald-50/55">
-                      <CircleDollarSign className="h-4 w-4" /> Prize Structure
-                    </div>
-                    <div className="grid gap-3 sm:grid-cols-3">
-                      {payoutStructure.map((payout) => (
-                        <div
-                          key={payout.place}
-                          className="rounded-2xl border border-white/10 bg-black/15 p-4 text-center"
-                        >
-                          <div className="text-sm font-semibold text-emerald-50/70">{payout.place}</div>
-                          <div className="mt-1 text-2xl font-black">{payout.amount}</div>
-                        </div>
-                      ))}
-                    </div>
+                  <div className="overflow-hidden rounded-2xl border border-white/10">
+                    <table className="min-w-full border-collapse">
+                      <thead>
+                        <tr className="bg-black/15 text-left text-xs uppercase tracking-[0.2em] text-emerald-50/55">
+                          <th className="px-4 py-3">Pos</th>
+                          <th className="px-4 py-3">Player</th>
+                          <th className="px-3 py-3 text-center">R1</th>
+                          <th className="px-3 py-3 text-center">R2</th>
+                          <th className="px-3 py-3 text-center">R3</th>
+                          <th className="px-3 py-3 text-center">R4</th>
+                          <th className="px-3 py-3 text-center">Thru</th>
+                          <th className="px-4 py-3 text-right">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {mastersLeaderboard.map((player, index) => (
+                          <tr key={player.name} className="border-t border-white/10">
+                            <td className="px-4 py-3 font-bold">{index + 1}</td>
+                            <td className="px-4 py-3 font-semibold">{player.name}</td>
+                            {player.scores.map((score, idx) => (
+                              <td key={idx} className="px-3 py-3 text-center text-sm text-emerald-50/75">
+                                {score === "" ? 0 : score}
+                              </td>
+                            ))}
+                            <td className="px-3 py-3 text-center text-sm text-emerald-50/75">
+                              {player.thru || "—"}
+                            </td>
+                            <td className="px-4 py-3 text-right font-black text-emerald-200">
+                              {formatScore(player.total)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 </section>
               </div>
@@ -818,9 +794,6 @@ export default function App() {
                       Player Input
                     </div>
                     <h2 className="mt-1 text-2xl font-black">Update golfer scores once</h2>
-                    <p className="text-sm text-emerald-50/70">
-                      Enter a golfer&apos;s score one time and it syncs everywhere that golfer appears.
-                    </p>
                   </div>
                   <div className="rounded-full border border-white/10 bg-black/15 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-emerald-50/75">
                     {playerIndex.length} unique golfers
@@ -888,6 +861,8 @@ export default function App() {
                 </div>
               </section>
             )}
+
+            {manualMastersLeaderboard.length > 0 && <div className="hidden" />}
           </div>
         </div>
       </div>
