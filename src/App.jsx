@@ -36,13 +36,13 @@ const initialTeams = [
   {
     name: "Bridger",
     players: [
-      "Ludvig Aberg",
+      "Ludvig Åberg",
       "Viktor Hovland",
       "Akshay Bhatia",
       "Jacob Bridgeman",
       "Sepp Straka",
       "Cameron Young",
-      "John Keefer"
+      "Johnny Keefer"
     ]
   },
   {
@@ -121,7 +121,7 @@ const initialTeams = [
     name: "Tanner",
     players: [
       "Jon Rahm",
-      "Ludvig Aberg",
+      "Ludvig Åberg",
       "Robert MacIntyre",
       "Viktor Hovland",
       "Corey Conners",
@@ -137,6 +137,12 @@ const initialTeams = [
     thru: ""
   }))
 }));
+
+// Players manually marked as cut because ESPN name matching fails
+const MANUAL_CUTS = new Set([
+  "nicolaihojgaard",
+  "johnnykeefer"
+]);
 
 const payoutStructure = [
   { place: "1st", amount: "$175" },
@@ -166,7 +172,9 @@ const NAME_ALIASES = {
   johnmichaelspaun: "jjspaun",
   ludvigaberg: "ludvigaberg",
   nicolaihojgaard: "nicolaihojgaard",
-  robertmacintyre: "robertmacintyre"
+  robertmacintyre: "robertmacintyre",
+  johnnykeefer: "johnnykeefer",
+  johnkeefer: "johnnykeefer"
 };
 
 function normalizePlayerKey(name) {
@@ -186,7 +194,7 @@ function getCumulativeScore(player, roundIndex) {
 function getBestFourEntries(players, roundIndex) {
   return players
     .filter((player) => !player.scores.includes("CUT"))
-    .map((player, idx) => ({
+    .map((player) => ({
       idx: players.indexOf(player),
       name: player.name,
       score: getCumulativeScore(player, roundIndex)
@@ -250,7 +258,18 @@ function applyEspnScoresToTeams(currentTeams, espnPlayers, currentRoundIndex) {
   return currentTeams.map((team) => ({
     ...team,
     players: team.players.map((player) => {
-      const match = playerMap.get(normalizePlayerKey(player.name));
+      const key = normalizePlayerKey(player.name);
+
+      // Manually cut players
+      if (MANUAL_CUTS.has(key)) {
+        return {
+          ...player,
+          scores: ["CUT", "", "", ""],
+          thru: "CUT"
+        };
+      }
+
+      const match = playerMap.get(key);
       if (!match) return player;
 
       if (match.cut) {
