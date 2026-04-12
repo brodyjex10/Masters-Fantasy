@@ -23,9 +23,7 @@ export async function handler() {
     const competitors = competition?.competitors ?? [];
 
     const normalizeGolfScore = (value) => {
-      if (value === null || value === undefined || value === "" || value === "--") {
-        return "";
-      }
+      if (value === null || value === undefined || value === "" || value === "--") return "";
       const s = String(value).trim();
       if (s.toUpperCase() === "E") return "0";
       return s;
@@ -40,6 +38,10 @@ export async function handler() {
     const players = competitors.map((player) => {
       const statistics = player?.statistics ?? [];
       const linescores = player?.linescores ?? [];
+      const statusId = player?.status?.type?.id;
+      const statusName = player?.status?.type?.name ?? "";
+      const isCut = statusId === "cut" || statusName.toLowerCase().includes("cut") ||
+                    String(player?.score?.displayValue ?? "").toUpperCase() === "CUT";
 
       const todayStat = statistics.find(
         (stat) =>
@@ -47,9 +49,7 @@ export async function handler() {
           stat?.displayName?.toLowerCase?.() === "today"
       ) || null;
 
-      const today = normalizeGolfScore(
-        todayStat?.displayValue ?? todayStat?.value ?? ""
-      );
+      const today = normalizeGolfScore(todayStat?.displayValue ?? todayStat?.value ?? "");
 
       return {
         name: player?.athlete?.displayName ?? "",
@@ -59,7 +59,8 @@ export async function handler() {
         r3: normalizeGolfScore(linescores[2]?.displayValue),
         r4: normalizeGolfScore(linescores[3]?.displayValue),
         total: normalizeGolfScore(player?.score?.displayValue ?? ""),
-        thru:
+        cut: isCut,
+        thru: isCut ? "CUT" :
           player?.status?.thru ??
           player?.status?.displayValue ??
           player?.status?.type?.shortDetail ??
@@ -73,18 +74,12 @@ export async function handler() {
         "Content-Type": "application/json",
         "Cache-Control": "public, max-age=60"
       },
-      body: JSON.stringify({
-        currentRoundIndex,
-        players
-      })
+      body: JSON.stringify({ currentRoundIndex, players })
     };
   } catch (error) {
     return {
       statusCode: 500,
-      body: JSON.stringify({
-        error: "Unexpected ESPN fetch error",
-        details: error.message
-      })
+      body: JSON.stringify({ error: "Unexpected ESPN fetch error", details: error.message })
     };
   }
 }
