@@ -146,6 +146,7 @@ const payoutStructure = [
 
 function parseScore(value) {
   if (value === "" || value === null || value === undefined) return null;
+  if (String(value).toUpperCase() === "CUT") return null;
   const cleaned = String(value).trim();
   if (cleaned.toUpperCase() === "E") return 0;
   const num = Number(cleaned);
@@ -184,8 +185,9 @@ function getCumulativeScore(player, roundIndex) {
 
 function getBestFourEntries(players, roundIndex) {
   return players
+    .filter((player) => !player.scores.includes("CUT"))
     .map((player, idx) => ({
-      idx,
+      idx: players.indexOf(player),
       name: player.name,
       score: getCumulativeScore(player, roundIndex)
     }))
@@ -250,6 +252,14 @@ function applyEspnScoresToTeams(currentTeams, espnPlayers, currentRoundIndex) {
     players: team.players.map((player) => {
       const match = playerMap.get(normalizePlayerKey(player.name));
       if (!match) return player;
+
+      if (match.cut) {
+        return {
+          ...player,
+          scores: ["CUT", "", "", ""],
+          thru: "CUT"
+        };
+      }
 
       const updatedScores = [...player.scores];
       if (match.r1 !== "") updatedScores[0] = match.r1;
@@ -563,7 +573,8 @@ export default function App() {
                           </thead>
                           <tbody>
                             {team.players.map((player, playerIdx) => {
-                              const isCounting = countingIndexes.has(playerIdx);
+                              const isCut = player.scores[0] === "CUT";
+                              const isCounting = !isCut && countingIndexes.has(playerIdx);
                               const playerTotal = getCumulativeScore(player, currentRoundIndex);
                               return (
                                 <tr
@@ -573,22 +584,24 @@ export default function App() {
                                   <td className="px-5 py-4 font-semibold md:px-6">{player.name}</td>
                                   {player.scores.map((score, idx) => (
                                     <td key={idx} className="px-3 py-3 text-center text-sm text-emerald-50/75">
-                                      {score === "" ? "—" : score}
+                                      {score === "CUT" ? <span className="text-red-400">CUT</span> : score === "" ? "—" : score}
                                     </td>
                                   ))}
                                   <td className="px-3 py-3 text-center text-sm text-emerald-50/75">
                                     {player.thru || "—"}
                                   </td>
                                   <td className="px-3 py-3 text-center font-bold text-emerald-200">
-                                    {formatScore(playerTotal)}
+                                    {isCut ? <span className="text-red-400">CUT</span> : formatScore(playerTotal)}
                                   </td>
                                   <td className="px-5 py-4 text-right md:px-6">
                                     <span className={`inline-flex rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide ${
-                                      isCounting
+                                      isCut
+                                        ? "bg-red-500/15 text-red-400"
+                                        : isCounting
                                         ? "bg-emerald-400/15 text-emerald-200"
                                         : "bg-white/10 text-emerald-50/70"
                                     }`}>
-                                      {isCounting ? "Counting" : "Bench"}
+                                      {isCut ? "Cut" : isCounting ? "Counting" : "Bench"}
                                     </span>
                                   </td>
                                 </tr>
@@ -632,7 +645,7 @@ export default function App() {
                           <td className="px-4 py-3 font-semibold">{player.name}</td>
                           {player.scores.map((score, idx) => (
                             <td key={idx} className="px-3 py-3 text-center text-sm text-emerald-50/75">
-                              {score === "" ? "—" : score}
+                              {score === "CUT" ? <span className="text-red-400">CUT</span> : score === "" ? "—" : score}
                             </td>
                           ))}
                           <td className="px-3 py-3 text-center text-sm text-emerald-50/75">
