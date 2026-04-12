@@ -5,11 +5,8 @@ import {
   Target,
   Medal,
   RefreshCw,
-  CircleDollarSign,
   Flag
 } from "lucide-react";
-
-const STORAGE_KEY = "masters-pool-tracker-state";
 
 const initialTeams = [
   {
@@ -220,7 +217,6 @@ function formatScore(score) {
 
 function buildPlayerIndex(teams) {
   const uniquePlayers = new Map();
-
   teams.forEach((team) => {
     team.players.forEach((player) => {
       if (!uniquePlayers.has(player.name)) {
@@ -232,7 +228,6 @@ function buildPlayerIndex(teams) {
       }
     });
   });
-
   return Array.from(uniquePlayers.values()).sort((a, b) =>
     a.name.localeCompare(b.name)
   );
@@ -274,28 +269,14 @@ function applyEspnScoresToTeams(currentTeams, espnPlayers, currentRoundIndex) {
 }
 
 export default function App() {
-  const [teams, setTeams] = useState(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      return saved ? JSON.parse(saved) : initialTeams;
-    } catch {
-      return initialTeams;
-    }
-  });
-
+  const [teams, setTeams] = useState(initialTeams);
   const [activeTab, setActiveTab] = useState("standings");
-  const [autoSyncEspn, setAutoSyncEspn] = useState(true);
   const [lastEspnSync, setLastEspnSync] = useState(null);
   const [espnError, setEspnError] = useState("");
   const [espnRoundIndex, setEspnRoundIndex] = useState(null);
 
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(teams));
-  }, [teams]);
-
   const fallbackRoundIndex = useMemo(() => {
     let latestRound = 0;
-
     teams.forEach((team) => {
       team.players.forEach((player) => {
         player.scores.forEach((score, roundIndex) => {
@@ -305,7 +286,6 @@ export default function App() {
         });
       });
     });
-
     return latestRound;
   }, [teams]);
 
@@ -313,8 +293,6 @@ export default function App() {
     typeof espnRoundIndex === "number" ? espnRoundIndex : fallbackRoundIndex;
 
   useEffect(() => {
-    if (!autoSyncEspn) return;
-
     let isMounted = true;
 
     const syncEspnScores = async () => {
@@ -334,11 +312,9 @@ export default function App() {
             : fallbackRoundIndex;
 
         setEspnRoundIndex(incomingRoundIndex);
-
         setTeams((prev) =>
           applyEspnScoresToTeams(prev, data.players || [], incomingRoundIndex)
         );
-
         setLastEspnSync(new Date());
         setEspnError("");
       } catch (error) {
@@ -354,56 +330,7 @@ export default function App() {
       isMounted = false;
       clearInterval(interval);
     };
-  }, [autoSyncEspn, fallbackRoundIndex]);
-
-  const updateScore = (teamIndex, playerIndex, roundIndex, value) => {
-    const cleaned = value.replace(/[^0-9E+\-]/gi, "");
-    const playerName = teams[teamIndex].players[playerIndex].name;
-
-    setTeams((prev) =>
-      prev.map((team) => ({
-        ...team,
-        players: team.players.map((player) =>
-          player.name !== playerName
-            ? player
-            : {
-                ...player,
-                scores: player.scores.map((score, rIdx) =>
-                  rIdx === roundIndex ? cleaned : score
-                )
-              }
-        )
-      }))
-    );
-  };
-
-  const updatePlayerScoreGlobally = (playerName, roundIndex, value) => {
-    const cleaned = value.replace(/[^0-9E+\-]/gi, "");
-
-    setTeams((prev) =>
-      prev.map((team) => ({
-        ...team,
-        players: team.players.map((player) =>
-          player.name !== playerName
-            ? player
-            : {
-                ...player,
-                scores: player.scores.map((score, rIdx) =>
-                  rIdx === roundIndex ? cleaned : score
-                )
-              }
-        )
-      }))
-    );
-  };
-
-  const resetScores = () => {
-    const confirmed = window.confirm("Reset all scores?");
-    if (!confirmed) return;
-    setTeams(initialTeams);
-    setEspnRoundIndex(null);
-    localStorage.removeItem(STORAGE_KEY);
-  };
+  }, [fallbackRoundIndex]);
 
   const rankedTeams = useMemo(() => {
     return teams
@@ -457,7 +384,6 @@ export default function App() {
                 <div className="text-sm font-medium text-emerald-100/80">
                   Augusta National
                 </div>
-
                 <div className="mt-4 flex flex-wrap items-center gap-2 text-sm text-emerald-50/80">
                   <button
                     onClick={() => window.location.reload()}
@@ -465,39 +391,18 @@ export default function App() {
                   >
                     <RefreshCw className="h-4 w-4" /> Refresh
                   </button>
-
-                  <button
-                    onClick={() => setAutoSyncEspn((prev) => !prev)}
-                    className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 font-medium"
-                  >
-                    {autoSyncEspn ? "ESPN Auto Sync: On" : "ESPN Auto Sync: Off"}
-                  </button>
-
-                  <button
-                    onClick={resetScores}
-                    className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 font-medium"
-                  >
-                    Reset Scores
-                  </button>
-
                   <div className="rounded-full border border-white/10 bg-black/15 px-3 py-1.5">
                     {lastEspnSync
                       ? `Last sync: ${lastEspnSync.toLocaleTimeString()}`
-                      : "Waiting for first sync"}
+                      : "Syncing ESPN scores..."}
                   </div>
-
-                  {espnError ? (
+                  {espnError && (
                     <div className="rounded-full border border-red-400/20 bg-red-500/10 px-3 py-1.5 text-red-200">
                       {espnError}
-                    </div>
-                  ) : (
-                    <div className="rounded-full border border-white/10 bg-black/15 px-3 py-1.5">
-                      Manual score entry enabled
                     </div>
                   )}
                 </div>
               </div>
-
               <div className="grid gap-2 sm:grid-cols-3">
                 {payoutStructure.map((payout) => (
                   <div
@@ -517,9 +422,9 @@ export default function App() {
           <div className="border-b border-white/10 px-4 py-3 md:px-8">
             <div className="flex flex-wrap gap-2">
               {[
-                { key: "teams", label: "Teams" },
                 { key: "standings", label: "Standings" },
-                { key: "player-input", label: "Player Input" }
+                { key: "teams", label: "Teams" },
+                { key: "field", label: "Field" }
               ].map((tab) => (
                 <button
                   key={tab.key}
@@ -545,13 +450,12 @@ export default function App() {
                       <Trophy className="h-3.5 w-3.5" /> Pool Dashboard
                     </div>
                     <h1 className="text-3xl font-black tracking-tight md:text-4xl">
-                      Live-style standings, built for your pool
+                      Live scores, updated every 5 minutes
                     </h1>
                   </div>
-
                   <div className="flex flex-wrap gap-2">
                     <div className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-[#123229]">
-                      Automatic: Round {currentRoundIndex + 1}
+                      Round {currentRoundIndex + 1}
                     </div>
                   </div>
                 </div>
@@ -564,14 +468,12 @@ export default function App() {
                   </div>
                   <div className="mt-3 text-3xl font-black">{teams.length}</div>
                 </div>
-
                 <div className="rounded-[24px] border border-white/10 bg-[#173a2f] p-4">
                   <div className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-emerald-50/55">
-                    <Target className="h-4 w-4" /> Entries
+                    <Target className="h-4 w-4" /> Scores
                   </div>
                   <div className="mt-3 text-3xl font-black">{enteredScores}</div>
                 </div>
-
                 <div className="rounded-[24px] border border-white/10 bg-[#173a2f] p-4">
                   <div className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-emerald-50/55">
                     <Medal className="h-4 w-4" /> Leader
@@ -585,94 +487,48 @@ export default function App() {
             </div>
 
             {activeTab === "standings" && (
-              <div className="grid gap-6 xl:grid-cols-[1fr_0.9fr]">
-                <section className="rounded-[28px] border border-white/10 bg-[#173a2f] p-5">
-                  <div className="mb-4 flex items-center justify-between">
-                    <h2 className="text-2xl font-black">Standings</h2>
-                    <div className="rounded-full border border-white/10 bg-black/15 px-3 py-1.5 text-xs font-semibold text-emerald-50/75">
-                      Automatic through Round {currentRoundIndex + 1}
-                    </div>
+              <div className="overflow-hidden rounded-[28px] border border-white/10 bg-[#173a2f] p-5">
+                <div className="mb-4 flex items-center justify-between">
+                  <h2 className="text-2xl font-black">Standings</h2>
+                  <div className="rounded-full border border-white/10 bg-black/15 px-3 py-1.5 text-xs font-semibold text-emerald-50/75">
+                    Through Round {currentRoundIndex + 1}
                   </div>
-
-                  <div className="overflow-hidden rounded-2xl border border-white/10">
-                    <table className="min-w-full border-collapse">
-                      <thead>
-                        <tr className="bg-black/15 text-left text-xs uppercase tracking-[0.2em] text-emerald-50/55">
-                          <th className="px-4 py-3">Rk</th>
-                          <th className="px-4 py-3">Owner</th>
-                          <th className="px-4 py-3">Strokes To Par</th>
-                          <th className="px-4 py-3">Payout</th>
+                </div>
+                <div className="overflow-hidden rounded-2xl border border-white/10">
+                  <table className="min-w-full border-collapse">
+                    <thead>
+                      <tr className="bg-black/15 text-left text-xs uppercase tracking-[0.2em] text-emerald-50/55">
+                        <th className="px-4 py-3">Rk</th>
+                        <th className="px-4 py-3">Owner</th>
+                        <th className="px-4 py-3">Strokes To Par</th>
+                        <th className="px-4 py-3">Payout</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rankedTeams.map((team, index) => (
+                        <tr key={team.name} className="border-t border-white/10">
+                          <td className="px-4 py-3 font-bold">{index + 1}</td>
+                          <td className="px-4 py-3 font-semibold">{team.name}</td>
+                          <td className="px-4 py-3 font-black text-emerald-200">
+                            {formatScore(team.currentScore)}
+                          </td>
+                          <td className="px-4 py-3 text-emerald-50/70">
+                            {index === 0 ? "$175" : index === 1 ? "$75" : index === 2 ? "$25" : "—"}
+                          </td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {rankedTeams.map((team, index) => (
-                          <tr key={team.name} className="border-t border-white/10">
-                            <td className="px-4 py-3 font-bold">{index + 1}</td>
-                            <td className="px-4 py-3 font-semibold">{team.name}</td>
-                            <td className="px-4 py-3 font-black text-emerald-200">
-                              {formatScore(team.currentScore)}
-                            </td>
-                            <td className="px-4 py-3 text-emerald-50/70">
-                              {index === 0 ? "$175" : index === 1 ? "$75" : index === 2 ? "$25" : "—"}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </section>
-
-                <section className="rounded-[28px] border border-white/10 bg-[#173a2f] p-5">
-                  <div className="mb-4 flex items-center justify-between">
-                    <h2 className="text-2xl font-black">Field Snapshot</h2>
-                  </div>
-
-                  <div className="overflow-hidden rounded-2xl border border-white/10">
-                    <table className="min-w-full border-collapse">
-                      <thead>
-                        <tr className="bg-black/15 text-left text-xs uppercase tracking-[0.2em] text-emerald-50/55">
-                          <th className="px-4 py-3">Pos</th>
-                          <th className="px-4 py-3">Player</th>
-                          <th className="px-3 py-3 text-center">R1</th>
-                          <th className="px-3 py-3 text-center">R2</th>
-                          <th className="px-3 py-3 text-center">R3</th>
-                          <th className="px-3 py-3 text-center">R4</th>
-                          <th className="px-3 py-3 text-center">Thru</th>
-                          <th className="px-4 py-3 text-right">Total</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {mastersLeaderboard.map((player, index) => (
-                          <tr key={player.name} className="border-t border-white/10">
-                            <td className="px-4 py-3 font-bold">{index + 1}</td>
-                            <td className="px-4 py-3 font-semibold">{player.name}</td>
-                            {player.scores.map((score, idx) => (
-                              <td key={idx} className="px-3 py-3 text-center text-sm text-emerald-50/75">
-                                {score === "" ? 0 : score}
-                              </td>
-                            ))}
-                            <td className="px-3 py-3 text-center text-sm text-emerald-50/75">
-                              {player.thru || "—"}
-                            </td>
-                            <td className="px-4 py-3 text-right font-black text-emerald-200">
-                              {formatScore(player.total)}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </section>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
 
             {activeTab === "teams" && (
               <div className="space-y-6">
-                {teams.map((team, teamIndex) => {
+                {teams.map((team) => {
                   const countingIndexes = new Set(
                     getBestFourEntries(team.players, currentRoundIndex).map((entry) => entry.idx)
                   );
-
                   return (
                     <section
                       key={team.name}
@@ -683,21 +539,16 @@ export default function App() {
                           <div>
                             <h3 className="text-2xl font-black tracking-tight">{team.name}</h3>
                             <p className="text-sm text-emerald-50/70">
-                              Best 4 cumulative golfer totals count toward this owner.
+                              Best 4 cumulative golfer totals count.
                             </p>
                           </div>
-
                           <div className="flex flex-wrap gap-2 text-sm">
-                            <div className="rounded-full bg-white/10 px-3 py-1.5 font-semibold text-emerald-50/80">
-                              Through R{currentRoundIndex + 1}: {formatScore(getRoundScore(team.players, currentRoundIndex))}
-                            </div>
                             <div className="rounded-full bg-emerald-400/15 px-3 py-1.5 font-semibold text-emerald-200">
-                              Tournament Total: {formatScore(getRoundScore(team.players, currentRoundIndex))}
+                              Total: {formatScore(getRoundScore(team.players, currentRoundIndex))}
                             </div>
                           </div>
                         </div>
                       </div>
-
                       <div className="overflow-x-auto">
                         <table className="min-w-full border-collapse">
                           <thead>
@@ -713,52 +564,32 @@ export default function App() {
                             </tr>
                           </thead>
                           <tbody>
-                            {team.players.map((player, playerIndex) => {
-                              const isCounting = countingIndexes.has(playerIndex);
+                            {team.players.map((player, playerIdx) => {
+                              const isCounting = countingIndexes.has(playerIdx);
                               const playerTotal = getCumulativeScore(player, currentRoundIndex);
-
                               return (
                                 <tr
                                   key={player.name}
                                   className={`border-t border-white/10 ${isCounting ? "bg-emerald-300/8" : ""}`}
                                 >
                                   <td className="px-5 py-4 font-semibold md:px-6">{player.name}</td>
-
-                                  {[0, 1, 2, 3].map((roundIndex) => (
-                                    <td key={roundIndex} className="px-3 py-3 text-center">
-                                      <input
-                                        type="text"
-                                        inputMode="numeric"
-                                        value={player.scores[roundIndex]}
-                                        onChange={(e) =>
-                                          updateScore(teamIndex, playerIndex, roundIndex, e.target.value)
-                                        }
-                                        placeholder="0"
-                                        className={`w-16 rounded-xl border px-3 py-2 text-center text-sm font-semibold outline-none transition ${
-                                          roundIndex === currentRoundIndex
-                                            ? "border-emerald-300/40 bg-emerald-300/10 text-white placeholder:text-emerald-100/50 focus:border-emerald-200"
-                                            : "border-white/10 bg-white/5 text-white placeholder:text-emerald-50/30 focus:border-white/25"
-                                        }`}
-                                      />
+                                  {player.scores.map((score, idx) => (
+                                    <td key={idx} className="px-3 py-3 text-center text-sm text-emerald-50/75">
+                                      {score === "" ? "—" : score}
                                     </td>
                                   ))}
-
                                   <td className="px-3 py-3 text-center text-sm text-emerald-50/75">
                                     {player.thru || "—"}
                                   </td>
-
                                   <td className="px-3 py-3 text-center font-bold text-emerald-200">
                                     {formatScore(playerTotal)}
                                   </td>
-
                                   <td className="px-5 py-4 text-right md:px-6">
-                                    <span
-                                      className={`inline-flex rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide ${
-                                        isCounting
-                                          ? "bg-emerald-400/15 text-emerald-200"
-                                          : "bg-white/10 text-emerald-50/70"
-                                      }`}
-                                    >
+                                    <span className={`inline-flex rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide ${
+                                      isCounting
+                                        ? "bg-emerald-400/15 text-emerald-200"
+                                        : "bg-white/10 text-emerald-50/70"
+                                    }`}>
                                       {isCounting ? "Counting" : "Bench"}
                                     </span>
                                   </td>
@@ -774,76 +605,46 @@ export default function App() {
               </div>
             )}
 
-            {activeTab === "player-input" && (
+            {activeTab === "field" && (
               <section className="rounded-[28px] border border-white/10 bg-[#173a2f] p-5">
-                <div className="mb-5 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-                  <div>
-                    <div className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-50/55">
-                      Player Input
-                    </div>
-                    <h2 className="mt-1 text-2xl font-black">Update golfer scores once</h2>
-                  </div>
-                  <div className="rounded-full border border-white/10 bg-black/15 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-emerald-50/75">
-                    {playerIndex.length} unique golfers
+                <div className="mb-4 flex items-center justify-between">
+                  <h2 className="text-2xl font-black">Field Snapshot</h2>
+                  <div className="rounded-full border border-white/10 bg-black/15 px-3 py-1.5 text-xs font-semibold text-emerald-50/75">
+                    Pool players only
                   </div>
                 </div>
-
-                <div className="overflow-x-auto rounded-2xl border border-white/10">
+                <div className="overflow-hidden rounded-2xl border border-white/10">
                   <table className="min-w-full border-collapse">
                     <thead>
                       <tr className="bg-black/15 text-left text-xs uppercase tracking-[0.2em] text-emerald-50/55">
-                        <th className="px-5 py-4">Player</th>
-                        <th className="px-3 py-4 text-center">R1</th>
-                        <th className="px-3 py-4 text-center">R2</th>
-                        <th className="px-3 py-4 text-center">R3</th>
-                        <th className="px-3 py-4 text-center">R4</th>
-                        <th className="px-3 py-4 text-center">Thru</th>
-                        <th className="px-3 py-4 text-center">Total</th>
-                        <th className="px-5 py-4 text-right">Teams</th>
+                        <th className="px-4 py-3">Pos</th>
+                        <th className="px-4 py-3">Player</th>
+                        <th className="px-3 py-3 text-center">R1</th>
+                        <th className="px-3 py-3 text-center">R2</th>
+                        <th className="px-3 py-3 text-center">R3</th>
+                        <th className="px-3 py-3 text-center">R4</th>
+                        <th className="px-3 py-3 text-center">Thru</th>
+                        <th className="px-4 py-3 text-right">Total</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {playerIndex.map((player) => {
-                        const playerTotal = getCumulativeScore(player, currentRoundIndex);
-                        const playerTeams = getPlayerTeams(teams, player.name);
-
-                        return (
-                          <tr key={player.name} className="border-t border-white/10">
-                            <td className="px-5 py-4 font-semibold">{player.name}</td>
-
-                            {[0, 1, 2, 3].map((roundIndex) => (
-                              <td key={roundIndex} className="px-3 py-3 text-center">
-                                <input
-                                  type="text"
-                                  inputMode="numeric"
-                                  value={player.scores[roundIndex]}
-                                  onChange={(e) =>
-                                    updatePlayerScoreGlobally(player.name, roundIndex, e.target.value)
-                                  }
-                                  placeholder="0"
-                                  className={`w-16 rounded-xl border px-3 py-2 text-center text-sm font-semibold outline-none transition ${
-                                    roundIndex === currentRoundIndex
-                                      ? "border-emerald-300/40 bg-emerald-300/10 text-white placeholder:text-emerald-100/50 focus:border-emerald-200"
-                                      : "border-white/10 bg-white/5 text-white placeholder:text-emerald-50/30 focus:border-white/25"
-                                  }`}
-                                />
-                              </td>
-                            ))}
-
-                            <td className="px-3 py-3 text-center text-sm text-emerald-50/75">
-                              {player.thru || "—"}
+                      {mastersLeaderboard.map((player, index) => (
+                        <tr key={player.name} className="border-t border-white/10">
+                          <td className="px-4 py-3 font-bold">{index + 1}</td>
+                          <td className="px-4 py-3 font-semibold">{player.name}</td>
+                          {player.scores.map((score, idx) => (
+                            <td key={idx} className="px-3 py-3 text-center text-sm text-emerald-50/75">
+                              {score === "" ? "—" : score}
                             </td>
-
-                            <td className="px-3 py-3 text-center font-bold text-emerald-200">
-                              {formatScore(playerTotal)}
-                            </td>
-
-                            <td className="px-5 py-4 text-right text-sm text-emerald-50/70">
-                              {playerTeams}
-                            </td>
-                          </tr>
-                        );
-                      })}
+                          ))}
+                          <td className="px-3 py-3 text-center text-sm text-emerald-50/75">
+                            {player.thru || "—"}
+                          </td>
+                          <td className="px-4 py-3 text-right font-black text-emerald-200">
+                            {formatScore(player.total)}
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
