@@ -252,11 +252,10 @@ function applyEspnScoresToTeams(currentTeams, espnPlayers, currentRoundIndex) {
       if (!match) return player;
 
       const updatedScores = [...player.scores];
-      const totalValue = match.total === "E" ? "0" : match.total ?? "";
-
-      if (totalValue !== "") {
-        updatedScores[currentRoundIndex] = String(totalValue);
-      }
+      if (match.r1 !== "") updatedScores[0] = match.r1;
+      if (match.r2 !== "") updatedScores[1] = match.r2;
+      if (match.r3 !== "") updatedScores[2] = match.r3;
+      if (match.r4 !== "") updatedScores[3] = match.r4;
 
       return {
         ...player,
